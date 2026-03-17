@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>務ダッシュボード</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <!-- サイドバー -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">務</div>
+      <h1>Dashboard</h1>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Overview</div>
+      <ul class="sidebar-nav">
+        <li><a href="#" class="active"><span class="nav-icon">📊</span> ダッシュボード</a></li>
+        <li><a href="#"><span class="nav-icon">❤️</span> 健康データ</a></li>
+        <li><a href="#"><span class="nav-icon">📅</span> カレンダー</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Work</div>
+      <ul class="sidebar-nav">
+        <li><a href="#"><span class="nav-icon">🍅</span> ポモドーロ</a></li>
+        <li><a href="#"><span class="nav-icon">💬</span> Chatwork <span class="nav-badge">タスク</span></a></li>
+        <li><a href="#"><span class="nav-icon">▶️</span> YouTube</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Finance</div>
+      <ul class="sidebar-nav">
+        <li><a href="#"><span class="nav-icon">💰</span> マネーフォワード</a></li>
+      </ul>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto; padding-bottom:16px;">
+      <ul class="sidebar-nav">
+        <li><a href="#" onclick="openSettings(); return false;"><span class="nav-icon">⚙️</span> 設定</a></li>
+      </ul>
+    </div>
+  </aside>
+
+  <!-- メインコンテンツ -->
+  <div class="main-content">
+
+    <!-- トップバー -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="topbar-breadcrumb">
+          <span>🏠</span>
+          <span>Dashboard /</span>
+          <span class="current">概要</span>
+        </div>
+        <div class="topbar-search">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Search...">
+        </div>
+      </div>
+      <div class="topbar-right">
+        <span class="topbar-date" id="headerDate"></span>
+        <button class="topbar-btn" onclick="refreshAll()">↻ 更新</button>
+        <button class="topbar-btn primary" onclick="openSettings()">⚙ 設定</button>
+      </div>
+    </header>
+
+    <!-- ダッシュボード -->
+    <main class="dashboard-grid">
+
+      <!-- ── 今日のサマリーカード ── -->
+      <div class="today-summary">
+        <div class="summary-card">
+          <div class="summary-top">
+            <div class="summary-icon bp">❤️</div>
+            <div class="summary-trend" id="summaryBPTrend"></div>
+          </div>
+          <div class="summary-bottom">
+            <h3 id="summaryBP">--/--</h3>
+            <p>血圧 (最高/最低)</p>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-top">
+            <div class="summary-icon sleep">🌙</div>
+            <div class="summary-trend" id="summarySleepTrend"></div>
+          </div>
+          <div class="summary-bottom">
+            <h3 id="summarySleep">--h</h3>
+            <p>睡眠時間</p>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-top">
+            <div class="summary-icon weight">⚖️</div>
+            <div class="summary-trend" id="summaryWeightTrend"></div>
+          </div>
+          <div class="summary-bottom">
+            <h3 id="summaryWeight">--kg</h3>
+            <p>体重</p>
+          </div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-top">
+            <div class="summary-icon pomodoro">🍅</div>
+            <div class="summary-trend trend-neutral">目標: 8回</div>
+          </div>
+          <div class="summary-bottom">
+            <h3 id="summaryPomodoro">0</h3>
+            <p>今日のポモドーロ</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 血圧チャート ── -->
+      <div class="widget span-2">
+        <div class="widget-header">
+          <h2>Content Performance</h2>
+          <select id="bpPeriod" onchange="updateBPChart()" class="widget-select">
+            <option value="7">7日間</option>
+            <option value="30" selected>30日間</option>
+            <option value="90">90日間</option>
+          </select>
+        </div>
+        <div class="widget-body">
+          <div class="chart-container">
+            <canvas id="bpChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ポモドーロタイマー ── -->
+      <div class="widget">
+        <div class="widget-header">
+          <h2><span class="widget-icon">🍅</span> ポモドーロ</h2>
+        </div>
+        <div class="widget-body">
+          <div class="pomodoro-container">
+            <div class="pomodoro-label" id="pomodoroLabel">作業時間</div>
+            <div class="pomodoro-timer work" id="pomodoroTimer">25:00</div>
+            <div class="pomodoro-controls">
+              <button class="pomodoro-btn primary" id="pomodoroStartBtn" onclick="togglePomodoro()">開始</button>
+              <button class="pomodoro-btn secondary" onclick="resetPomodoro()">リセット</button>
+              <button class="pomodoro-btn secondary" onclick="skipPomodoro()">スキップ</button>
+            </div>
+            <div class="pomodoro-stats">
+              <div class="pomodoro-stat">
+                <span>完了</span>
+                <strong id="pomodoroCount">0</strong>
+              </div>
+              <div class="pomodoro-stat">
+                <span>合計作業</span>
+                <strong id="pomodoroTotal">0分</strong>
+              </div>
+              <div class="pomodoro-stat">
+                <span>目標</span>
+                <strong>8回</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Googleカレンダー ── -->
+      <div class="widget span-row-2">
+        <div class="widget-header">
+          <h2><span class="widget-icon">📅</span> カレンダー</h2>
+          <span class="status-badge connected" id="calendarStatus">Google連携中</span>
+        </div>
+        <div class="widget-body">
+          <ul class="calendar-events" id="calendarEvents">
+            <li class="loading-spinner"></li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── 睡眠・体重チャート ── -->
+      <div class="widget span-2">
+        <div class="widget-header">
+          <h2>睡眠 & 体重トレンド</h2>
+        </div>
+        <div class="widget-body">
+          <div class="chart-container">
+            <canvas id="sleepWeightChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Chatwork タスク ── -->
+      <div class="widget">
+        <div class="widget-header">
+          <h2><span class="widget-icon">💬</span> Chatwork</h2>
+          <span class="status-badge disconnected" id="chatworkStatus">未接続</span>
+        </div>
+        <div class="widget-body">
+          <ul class="task-list" id="chatworkTasks">
+            <div class="not-connected">
+              <div class="icon">💬</div>
+              <p>設定からChatwork APIトークンを<br>入力して接続してください</p>
+            </div>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── YouTube チャンネル ── -->
+      <div class="widget span-2">
+        <div class="widget-header">
+          <h2><span class="widget-icon">▶️</span> YouTube チャンネル</h2>
+          <span class="status-badge disconnected" id="youtubeStatus">未接続</span>
+        </div>
+        <div class="widget-body">
+          <div id="youtubeContent">
+            <div class="not-connected">
+              <div class="icon">▶️</div>
+              <p>設定からYouTube APIキーと<br>チャンネルIDを入力してください</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── マネーフォワード ── -->
+      <div class="widget span-2">
+        <div class="widget-header">
+          <h2><span class="widget-icon">💰</span> マネーフォワード</h2>
+          <span class="status-badge disconnected" id="moneyStatus">未接続</span>
+        </div>
+        <div class="widget-body">
+          <div id="moneyContent">
+            <div class="not-connected">
+              <div class="icon">💰</div>
+              <p>マネーフォワードの連携は<br>設定画面から行えます</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── 健康データ詳細テーブル ── -->
+      <div class="widget span-4">
+        <div class="widget-header">
+          <h2><span class="widget-icon">📋</span> 健康データ詳細</h2>
+          <span id="healthDataCount" style="font-size:0.8rem;color:var(--text-muted);font-weight:500"></span>
+        </div>
+        <div class="widget-body">
+          <div class="health-table-container" id="healthTableContainer">
+            <div class="loading-spinner"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div class="modal-overlay" id="settingsModal">
+    <div class="modal">
+      <h2>⚙ ダッシュボード設定</h2>
+
+      <div class="form-group">
+        <label>Google Sheets ID</label>
+        <input type="text" id="settingSheetsId" placeholder="スプレッドシートID">
+      </div>
+      <div class="form-group">
+        <label>Chatwork API トークン</label>
+        <input type="password" id="settingChatworkToken" placeholder="APIトークン">
+      </div>
+      <div class="form-group">
+        <label>YouTube API キー</label>
+        <input type="password" id="settingYoutubeKey" placeholder="APIキー">
+      </div>
+      <div class="form-group">
+        <label>YouTube チャンネル ID</label>
+        <input type="text" id="settingYoutubeChannel" placeholder="UCxxxxxxxxxx">
+      </div>
+      <div class="form-group">
+        <label>ポモドーロ作業時間（分）</label>
+        <input type="number" id="settingPomodoroWork" value="25" min="1" max="60">
+      </div>
+      <div class="form-group">
+        <label>ポモドーロ休憩時間（分）</label>
+        <input type="number" id="settingPomodoroBreak" value="5" min="1" max="30">
+      </div>
+      <div class="form-group">
+        <label>Google Calendar ID</label>
+        <input type="text" id="settingCalendarUrl" placeholder="your-email@gmail.com">
+      </div>
+
+      <div class="modal-actions">
+        <button class="pomodoro-btn secondary" onclick="closeSettings()">キャンセル</button>
+        <button class="pomodoro-btn primary" onclick="saveSettings()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>
