@@ -245,19 +245,34 @@ def fetch_video_views(video_ids):
 
 @app.route('/api/youtube/stats')
 def get_youtube_stats():
+    # 環境変数 or settings.json から取得
     channel_id = YOUTUBE_CHANNEL_ID
+    api_key = YOUTUBE_API_KEY
+
+    # settings.jsonからも取得を試みる
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, 'r') as f:
+                s = json.load(f)
+                if not channel_id and s.get('youtubeChannel'):
+                    channel_id = s['youtubeChannel']
+                if not api_key and s.get('youtubeKey'):
+                    api_key = s['youtubeKey']
+        except Exception:
+            pass
+
     if not channel_id:
         return jsonify({'error': 'YouTube channel ID not configured', 'stats': None}), 200
 
     try:
         # APIキーがある場合はYouTube Data APIを使用
-        if YOUTUBE_API_KEY:
+        if api_key:
             # チャンネル統計
             url = 'https://www.googleapis.com/youtube/v3/channels'
             params = {
                 'part': 'statistics,snippet',
                 'id': channel_id,
-                'key': YOUTUBE_API_KEY
+                'key': api_key
             }
             resp = requests.get(url, params=params, timeout=10)
             resp.raise_for_status()
@@ -277,7 +292,7 @@ def get_youtube_stats():
                 'order': 'date',
                 'maxResults': 10,
                 'type': 'video',
-                'key': YOUTUBE_API_KEY
+                'key': api_key
             }
             search_resp = requests.get(search_url, params=search_params, timeout=10)
             video_items = search_resp.json().get('items', []) if search_resp.ok else []
@@ -290,7 +305,7 @@ def get_youtube_stats():
                 vid_params = {
                     'part': 'statistics,snippet',
                     'id': ','.join(video_ids),
-                    'key': YOUTUBE_API_KEY
+                    'key': api_key
                 }
                 vid_resp = requests.get(vid_url, params=vid_params, timeout=10)
                 if vid_resp.ok:
