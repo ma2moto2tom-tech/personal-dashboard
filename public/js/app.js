@@ -707,7 +707,6 @@ function renderYoutubeViewsChart(videos) {
     }
   });
 }
-}
 
 // ══════════════════════════════════════════
 //  設定モーダル
