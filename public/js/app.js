@@ -575,6 +575,8 @@ async function loadChatworkTasks() {
 // ══════════════════════════════════════════
 //  YouTube
 // ══════════════════════════════════════════
+let ytViewsChart = null;
+
 async function loadYoutubeStats() {
   try {
     const resp = await fetch(`${API_BASE}/api/youtube/stats`);
@@ -582,18 +584,19 @@ async function loadYoutubeStats() {
 
     if (!result.stats) return;
 
+    const source = result.source || 'api';
     document.getElementById('youtubeStatus').className = 'status-badge connected';
-    document.getElementById('youtubeStatus').textContent = '接続中';
+    document.getElementById('youtubeStatus').textContent = source === 'rss' ? 'RSS連携中' : '接続中';
 
     const s = result.stats;
     let html = `
       <div class="yt-stats-grid">
         <div class="yt-stat">
-          <div class="value">${formatNumber(s.subscriberCount)}</div>
+          <div class="value">${s.subscriberCount > 0 ? formatNumber(s.subscriberCount) : '-'}</div>
           <div class="label">登録者数</div>
         </div>
         <div class="yt-stat">
-          <div class="value">${formatNumber(s.viewCount)}</div>
+          <div class="value">${s.viewCount > 0 ? formatNumber(s.viewCount) : '-'}</div>
           <div class="label">総再生回数</div>
         </div>
         <div class="yt-stat">
@@ -602,26 +605,108 @@ async function loadYoutubeStats() {
         </div>
       </div>`;
 
-    if (result.recentVideos && result.recentVideos.length > 0) {
+    // 再生数グラフ（APIキーありの場合）
+    const videos = result.recentVideos || [];
+    const hasViews = videos.some(v => v.views > 0);
+    if (hasViews) {
+      html += '<div style="height:200px;margin-bottom:16px;"><canvas id="ytViewsChart"></canvas></div>';
+    }
+
+    if (videos.length > 0) {
       html += '<ul class="yt-video-list">';
-      result.recentVideos.forEach(v => {
+      videos.forEach(v => {
         const date = new Date(v.publishedAt).toLocaleDateString('ja-JP');
+        const viewsStr = v.views > 0 ? `${formatNumber(v.views)}回再生` : '';
+        const likesStr = v.likes > 0 ? ` · ${formatNumber(v.likes)}いいね` : '';
         html += `
           <li class="yt-video">
-            <img src="${v.thumbnail}" alt="" loading="lazy">
+            <a href="https://www.youtube.com/watch?v=${v.videoId}" target="_blank" rel="noopener" style="flex-shrink:0;">
+              <img src="${v.thumbnail}" alt="" loading="lazy">
+            </a>
             <div class="yt-video-info">
               <h4>${escapeHtml(v.title)}</h4>
-              <p>${date}</p>
+              <p>${date}${viewsStr ? ' · ' + viewsStr : ''}${likesStr}</p>
             </div>
           </li>`;
       });
       html += '</ul>';
     }
 
+    // APIキーなしの場合のメッセージ
+    if (result.note) {
+      html += `<p style="font-size:0.75rem;color:var(--text-muted);margin-top:12px;text-align:center;">💡 ${escapeHtml(result.note)}</p>`;
+    }
+
     document.getElementById('youtubeContent').innerHTML = html;
+
+    // 再生数グラフを描画
+    if (hasViews) {
+      renderYoutubeViewsChart(videos);
+    }
   } catch (e) {
     console.error('YouTube error:', e);
   }
+}
+
+function renderYoutubeViewsChart(videos) {
+  const sorted = [...videos].reverse(); // 古い順
+  const labels = sorted.map(v => {
+    const t = v.title || '';
+    return t.length > 15 ? t.substring(0, 15) + '...' : t;
+  });
+  const views = sorted.map(v => v.views || 0);
+
+  const ctx = document.getElementById('ytViewsChart');
+  if (!ctx) return;
+  if (ytViewsChart) ytViewsChart.destroy();
+
+  ytViewsChart = new Chart(ctx.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '再生回数',
+        data: views,
+        backgroundColor: 'rgba(239,68,68,0.15)',
+        borderColor: '#ef4444',
+        borderWidth: 2,
+        borderRadius: 6,
+        barPercentage: 0.6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#ffffff',
+          borderColor: '#e8e8ef',
+          borderWidth: 1,
+          titleColor: '#1a1f36',
+          bodyColor: '#5e6278',
+          callbacks: {
+            label: ctx => `${formatNumber(ctx.raw)}回再生`
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b7280', font: { size: 9 }, maxRotation: 45 },
+          grid: { display: false }
+        },
+        y: {
+          ticks: {
+            color: '#6b7280',
+            font: { size: 10 },
+            callback: v => formatNumber(v)
+          },
+          grid: { color: 'rgba(0,0,0,0.06)' }
+        }
+      }
+    }
+  });
+}
 }
 
 // ══════════════════════════════════════════
