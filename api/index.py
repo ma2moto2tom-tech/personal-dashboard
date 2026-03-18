@@ -4,6 +4,7 @@ import json
 import csv
 import io
 import re
+import xml.etree.ElementTree as ET
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import requests as http_requests
@@ -16,7 +17,7 @@ GOOGLE_SHEETS_ID = os.environ.get('GOOGLE_SHEETS_ID', '1qy8QoaWRg-1IzGkldplo6dNF
 GOOGLE_SHEETS_GID = os.environ.get('GOOGLE_SHEETS_GID', '1991911400')
 CHATWORK_API_TOKEN = os.environ.get('CHATWORK_API_TOKEN', '')
 YOUTUBE_API_KEY = os.environ.get('YOUTUBE_API_KEY', '')
-YOUTUBE_CHANNEL_ID = os.environ.get('YOUTUBE_CHANNEL_ID', '')
+YOUTUBE_CHANNEL_ID = os.environ.get('YOUTUBE_CHANNEL_ID', 'UCCzo6GggJJWF-Fhd_QaCLCQ')
 
 
 def parse_transposed_health_data(csv_text):
@@ -90,6 +91,7 @@ def parse_transposed_health_data(csv_text):
     return all_daily_data
 
 
+# ── 健康データ ──
 @app.route('/api/health-data')
 def get_health_data():
     try:
@@ -117,6 +119,7 @@ def get_health_data():
         return jsonify({'error': str(e), 'data': [], 'count': 0}), 500
 
 
+# ── Chatwork タスク ──
 @app.route('/api/chatwork/tasks')
 def get_chatwork_tasks():
     if not CHATWORK_API_TOKEN:
@@ -149,74 +152,162 @@ def get_chatwork_tasks():
         return jsonify({'error': str(e), 'tasks': []}), 200
 
 
+# ── YouTube RSSフィード取得 ──
+def fetch_youtube_rss(channel_id):
+    """RSSフィードから動画一覧を取得（APIキー不要）"""
+    rss_url = f'https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}'
+    resp = http_requests.get(rss_url, timeout=15)
+    resp.raise_for_status()
+
+    ns = {
+        'atom': 'http://www.w3.org/2005/Atom',
+        'yt': 'http://www.youtube.com/xml/schemas/2015',
+        'media': 'http://search.yahoo.com/mrss/'
+    }
+    root = ET.fromstring(resp.text)
+
+    channel_name = root.find('atom:title', ns)
+    channel_name = channel_name.text if channel_name is not None else 'Unknown'
+
+    videos = []
+    for entry in root.findall('atom:entry', ns):
+        video_id = entry.find('yt:videoId', ns)
+        title = entry.find('atom:title', ns)
+        published = entry.find('atom:published', ns)
+        media_group = entry.find('media:group', ns)
+        thumbnail = None
+        description = ''
+        if media_group is not None:
+            thumb_el = media_group.find('media:thumbnail', ns)
+            if thumb_el is not None:
+                thumbnail = thumb_el.get('url')
+            desc_el = media_group.find('media:description', ns)
+            if desc_el is not None:
+                description = desc_el.text or ''
+
+        vid = video_id.text if video_id is not None else ''
+
+        videos.append({
+            'videoId': vid,
+            'title': title.text if title is not None else '',
+            'publishedAt': published.text if published is not None else '',
+            'thumbnail': thumbnail or f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+            'views': 0,
+            'description': description[:100]
+        })
+
+    return channel_name, videos
+
+
+# ── YouTube チャンネル統計 ──
 @app.route('/api/youtube/stats')
 def get_youtube_stats():
-    if not YOUTUBE_API_KEY or not YOUTUBE_CHANNEL_ID:
-        return jsonify({'error': 'YouTube API not configured', 'stats': None}), 200
+    channel_id = YOUTUBE_CHANNEL_ID
+    api_key = YOUTUBE_API_KEY
+
+    if not channel_id:
+        return jsonify({'error': 'YouTube channel ID not configured', 'stats': None}), 200
 
     try:
-        url = 'https://www.googleapis.com/youtube/v3/channels'
-        params = {
-            'part': 'statistics,snippet',
-            'id': YOUTUBE_CHANNEL_ID,
-            'key': YOUTUBE_API_KEY
-        }
-        resp = http_requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
+        if api_key:
+            # APIキーあり: YouTube Data API使用
+            url = 'https://www.googleapis.com/youtube/v3/channels'
+            params = {
+                'part': 'statistics,snippet',
+                'id': channel_id,
+                'key': api_key
+            }
+            resp = http_requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            api_data = resp.json()
 
-        if not data.get('items'):
-            return jsonify({'error': 'Channel not found', 'stats': None}), 200
+            if not api_data.get('items'):
+                return jsonify({'error': 'Channel not found', 'stats': None}), 200
 
-        channel = data['items'][0]
-        stats = channel['statistics']
+            channel = api_data['items'][0]
+            ch_stats = channel['statistics']
 
-        videos_url = 'https://www.googleapis.com/youtube/v3/search'
-        videos_params = {
-            'part': 'snippet',
-            'channelId': YOUTUBE_CHANNEL_ID,
-            'order': 'date',
-            'maxResults': 5,
-            'type': 'video',
-            'key': YOUTUBE_API_KEY
-        }
-        videos_resp = http_requests.get(videos_url, params=videos_params, timeout=10)
-        videos = []
-        if videos_resp.ok:
-            for item in videos_resp.json().get('items', []):
-                videos.append({
-                    'title': item['snippet']['title'],
-                    'videoId': item['id']['videoId'],
-                    'publishedAt': item['snippet']['publishedAt'],
-                    'thumbnail': item['snippet']['thumbnails']['medium']['url']
-                })
+            search_url = 'https://www.googleapis.com/youtube/v3/search'
+            search_params = {
+                'part': 'snippet',
+                'channelId': channel_id,
+                'order': 'date',
+                'maxResults': 10,
+                'type': 'video',
+                'key': api_key
+            }
+            search_resp = http_requests.get(search_url, params=search_params, timeout=10)
+            video_items = search_resp.json().get('items', []) if search_resp.ok else []
+            video_ids = [v['id']['videoId'] for v in video_items]
 
-        return jsonify({
-            'stats': {
-                'subscriberCount': int(stats.get('subscriberCount', 0)),
-                'viewCount': int(stats.get('viewCount', 0)),
-                'videoCount': int(stats.get('videoCount', 0)),
-                'channelName': channel['snippet']['title']
-            },
-            'recentVideos': videos
-        })
+            videos = []
+            if video_ids:
+                vid_url = 'https://www.googleapis.com/youtube/v3/videos'
+                vid_params = {
+                    'part': 'statistics,snippet',
+                    'id': ','.join(video_ids),
+                    'key': api_key
+                }
+                vid_resp = http_requests.get(vid_url, params=vid_params, timeout=10)
+                if vid_resp.ok:
+                    for v in vid_resp.json().get('items', []):
+                        videos.append({
+                            'videoId': v['id'],
+                            'title': v['snippet']['title'],
+                            'publishedAt': v['snippet']['publishedAt'],
+                            'thumbnail': v['snippet']['thumbnails'].get('medium', {}).get('url', ''),
+                            'views': int(v['statistics'].get('viewCount', 0)),
+                            'likes': int(v['statistics'].get('likeCount', 0)),
+                            'comments': int(v['statistics'].get('commentCount', 0))
+                        })
+
+            return jsonify({
+                'stats': {
+                    'subscriberCount': int(ch_stats.get('subscriberCount', 0)),
+                    'viewCount': int(ch_stats.get('viewCount', 0)),
+                    'videoCount': int(ch_stats.get('videoCount', 0)),
+                    'channelName': channel['snippet']['title']
+                },
+                'recentVideos': videos,
+                'source': 'api'
+            })
+
+        else:
+            # APIキーなし: RSSフィードで動画一覧を取得
+            channel_name, videos = fetch_youtube_rss(channel_id)
+
+            return jsonify({
+                'stats': {
+                    'subscriberCount': 0,
+                    'viewCount': 0,
+                    'videoCount': len(videos),
+                    'channelName': channel_name
+                },
+                'recentVideos': videos[:10],
+                'source': 'rss',
+                'note': 'YouTube Data APIキーを設定すると再生回数等の詳細統計が表示されます'
+            })
+
     except Exception as e:
         return jsonify({'error': str(e), 'stats': None}), 200
 
 
+# ── Google Calendar ──
 @app.route('/api/calendar/events')
 def get_calendar_events():
     return jsonify({'message': 'Use Google Calendar embed in frontend', 'events': []})
 
 
+# ── マネーフォワード ──
 @app.route('/api/moneyforward/summary')
 def get_moneyforward_summary():
     return jsonify({
-        'message': 'MoneyForward requires browser-based OAuth. Configure in settings.',
+        'message': 'MoneyForward requires browser-based OAuth.',
         'summary': None
     })
 
 
+# ── 設定 ──
 @app.route('/api/settings', methods=['GET', 'POST'])
 def handle_settings():
     if request.method == 'POST':
