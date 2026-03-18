@@ -262,7 +262,7 @@ def get_youtube_stats():
             pass
 
     if not channel_id:
-        return jsonify({'error': 'YouTube channel ID not configured', 'stats': None}), 200
+        return jsonify({'error': 'YouTube channel ID not configured. Set YOUTUBE_CHANNEL_ID env var.', 'stats': None}), 200
 
     try:
         # APIキーがある場合はYouTube Data APIを使用
